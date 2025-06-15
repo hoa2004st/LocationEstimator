@@ -327,8 +327,8 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
     # True position and bias (for simulation)
     true_position_latlon = [21.058617, 105.821816]
     true_bias_deg = -3.0  # degrees clockwise bias
-    bearing_noise_std = 1.0  # degrees (for simulation)
-    estimator_noise_std = 1.0  # degrees (what we tell the estimator)
+    bearing_noise_std = 5.0  # degrees (for simulation)
+    estimator_noise_std = 5.0  # degrees (what we tell the estimator)
     
     # Create template estimator for coordinate conversion
     temp_estimator = PositionBiasEstimator(
@@ -643,4 +643,4 @@ def run_monte_carlo_comparison(n_simulations=100):
 # Run your original simulation
 # results = run_monte_carlo_simulation(n_simulations=100, plot_last=True)
 # Run the comparison
-# run_monte_carlo_comparison(n_simulations=100)
+run_monte_carlo_comparison(n_simulations=100)
