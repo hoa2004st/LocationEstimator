@@ -530,24 +530,22 @@ def find_position_and_bias(anchors_lat_lon, measured_bearings_deg,
     return output
 
 # --- Monte Carlo Comparison Function ---
-def run_monte_carlo_comparison(n_simulations=100):
+def run_monte_carlo_comparison(n_simulations=100, true_bias_deg = 3.0, bearing_noise_std = 7.0):
     """
     Runs a Monte Carlo simulation comparing the PositionBiasEstimator (likelihood)
     and the least-squares (orthogonal distance) method.
     """
     # Define anchor points in longitude/latitude
     anchor_positions_latlon = [
-        [21.046234, 105.808489],
-        [21.041684, 105.838083],
-        [21.062275, 105.833513],
-        [21.072387, 105.817222],
-        [21.062281, 105.805139]
+        [21.059704433357215, 105.83164073397909],
+        [21.044908483795947, 105.84354179156118],
+        [21.032176142038296, 105.81281267185187],
+        [21.055085704911132, 105.80497694476077],
+        [21.074899320638487, 105.812495071947]
     ]
-    anchor_uncertainty_diameters = [30, 30, 30, 30, 30]
-    true_position_latlon = [21.058617, 105.821816]
-    true_bias_deg = 3.0
-    bearing_noise_std = 1.0
-    estimator_noise_std = 1.0
+    anchor_uncertainty_diameters = [60, 30, 99, 48, 52]
+    true_position_latlon = [21.054072809108007, 105.82037561131499]
+    estimator_noise_std = bearing_noise_std
 
     temp_estimator = PositionBiasEstimator(
         anchor_positions_latlon=anchor_positions_latlon,
@@ -618,29 +616,56 @@ def run_monte_carlo_comparison(n_simulations=100):
     print(f"Likelihood Estimator Mean Bias Error: {np.mean(bias_errors_likelihood):.2f}°, Median: {np.median(bias_errors_likelihood):.2f}°")
     print(f"Least Squares Estimator Mean Bias Error: {np.nanmean(bias_errors_ls):.2f}°, Median: {np.nanmedian(bias_errors_ls):.2f}°")
     
-    # --- Visualization of Position Error Distributions ---
-    plt.figure(figsize=(14, 5))
+    # # --- Visualization of Position Error Distributions ---
+    # plt.figure(figsize=(14, 5))
 
-    # Plot 1: Likelihood Estimator
-    plt.subplot(1, 2, 1)
-    plt.hist(errors_likelihood, bins=20, alpha=0.7, color='tab:blue')
-    plt.xlabel("Position Error (meters)")
-    plt.ylabel("Frequency")
-    plt.title("Likelihood Estimator\nPosition Error Distribution")
-    plt.grid(True, alpha=0.3)
+    # # Plot 1: Likelihood Estimator
+    # plt.subplot(1, 2, 1)
+    # plt.hist(errors_likelihood, bins=20, alpha=0.7, color='tab:blue')
+    # plt.xlabel("Position Error (meters)")
+    # plt.ylabel("Frequency")
+    # plt.title("Likelihood Estimator\nPosition Error Distribution")
+    # plt.grid(True, alpha=0.3)
 
-    # Plot 2: Least Squares Estimator
-    plt.subplot(1, 2, 2)
-    plt.hist(errors_ls, bins=20, alpha=0.7, color='tab:orange')
-    plt.xlabel("Position Error (meters)")
-    plt.ylabel("Frequency")
-    plt.title("Stansfield Bias-Removing Estimator\nPosition Error Distribution")
-    plt.grid(True, alpha=0.3)
+    # # Plot 2: Least Squares Estimator
+    # plt.subplot(1, 2, 2)
+    # plt.hist(errors_ls, bins=20, alpha=0.7, color='tab:orange')
+    # plt.xlabel("Position Error (meters)")
+    # plt.ylabel("Frequency")
+    # plt.title("Stansfield Bias-Removing Estimator\nPosition Error Distribution")
+    # plt.grid(True, alpha=0.3)
 
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
+    return [errors_likelihood, errors_ls]
 
 # Run your original simulation
 # results = run_monte_carlo_simulation(n_simulations=100, plot_last=True)
 # Run the comparison
-run_monte_carlo_comparison(n_simulations=100)
+biases = [0, 5, 10]
+noises = [1, 3, 5, 7, 10]
+results = {}
+for bias in biases:
+    results[bias] = {}
+    for noise in noises:
+        print(f"\nRunning comparison with bias {bias}° and noise {noise}°")
+        results[bias][noise] = run_monte_carlo_comparison(n_simulations=1000, true_bias_deg=bias, bearing_noise_std=noise)
+
+for bias in biases:
+    means_likelihood = []
+    means_ls = []
+    for noise in noises:
+        errors_likelihood, errors_ls = results[bias][noise]
+        means_likelihood.append(np.mean(errors_likelihood))
+        means_ls.append(np.mean(errors_ls))
+    
+    plt.figure(figsize=(7, 5))
+    plt.plot(noises, means_likelihood, marker='o', label='Likelihood Estimator')
+    plt.plot(noises, means_ls, marker='s', label='Least Squares Estimator')
+    plt.xlabel('Bearing Noise Std (deg)')
+    plt.ylabel('Mean Position Error (meters)')
+    plt.title(f'Position Error vs. Bearing Noise (Bias = {bias}°)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()

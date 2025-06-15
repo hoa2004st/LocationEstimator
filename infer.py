@@ -9,7 +9,7 @@ anchor_positions_latlon = [
 ]
 anchor_uncertainty_diameters = [97, 40, 64]
 observed_bearings = [198.67, 109.67, 60]
-bearing_noise_std = 5.0
+bearing_noise_std = 7.0
 
 # Set to None if you don't want error calculation
 ground_truth = {

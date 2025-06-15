@@ -32,7 +32,7 @@ for i in range(n_anchors):
     observed_bearings.append(bearing)
 
 st.subheader("Measurement Noise")
-bearing_noise_std = st.number_input("Bearing noise std (deg)", min_value=0.0, value=5.0, format="%f")
+bearing_noise_std = st.number_input("Bearing noise std (deg)", min_value=0.0, value=7.0, format="%f")
 
 st.subheader("Ground Truth (optional)")
 col1, col2 = st.columns(2)
