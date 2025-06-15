@@ -4,38 +4,38 @@ from scipy.stats import norm
 import matplotlib.pyplot as plt
 
 class PositionBiasEstimator:
-    def __init__(self, anchor_positions_lonlat, anchor_uncertainty_diameters, bearing_observations, bearing_noise_std):
+    def __init__(self, anchor_positions_latlon, anchor_uncertainty_diameters, bearing_observations, bearing_noise_std):
         """
         Initialize the estimator with anchor points and observations.
         
         Parameters:
-        - anchor_positions_lonlat: list of (longitude, latitude) positions for each anchor point
+        - anchor_positions_latlon: list of (latitude, longitude) positions for each anchor point
         - anchor_uncertainty_diameters: list of uncertainty diameters for each anchor point (in meters)
-                                      Diameter represents 95% confidence (4 * standard deviation)
+                                      Diameter represents 99% confidence (6 * standard deviation)
         - bearing_observations: list of observed bearings (in degrees, 0° = North, clockwise)
         - bearing_noise_std: standard deviation of bearing measurement noise (in degrees)
         """
-        self.anchor_lonlats = np.array(anchor_positions_lonlat)
+        self.anchor_latlons = np.array(anchor_positions_latlon)
         self.anchor_diameters = np.array(anchor_uncertainty_diameters)
         
         # Convert diameters to covariance matrices (circular, no correlation)
-        # diameter = 4 * std (95% rule), so std = diameter / 4
-        # variance = std^2 = (diameter / 4)^2
+        # diameter = 6 * std (99% rule), so std = diameter / 6
+        # variance = std^2 = (diameter / 6)^2
         self.anchor_covs_meters = []
         for diameter in anchor_uncertainty_diameters:
-            variance = (diameter / 4.0) ** 2
+            variance = (diameter / 6.0) ** 2
             cov_matrix = np.array([[variance, 0], [0, variance]])
             self.anchor_covs_meters.append(cov_matrix)
         
         self.observed_bearings_deg = np.array(bearing_observations)
         self.bearing_noise_std_deg = bearing_noise_std
-        self.n_anchors = len(anchor_positions_lonlat)
+        self.n_anchors = len(anchor_positions_latlon)
         
         # Use first anchor as reference point for coordinate conversion
-        self.ref_lon, self.ref_lat = self.anchor_lonlats[0]
+        self.ref_lat, self.ref_lon = self.anchor_latlons[0]
         
         # Convert anchor positions to relative meters
-        self.anchors_meters = np.array([self.lonlat_to_meters(lon, lat) for lon, lat in self.anchor_lonlats])
+        self.anchors_meters = np.array([self.latlon_to_meters(lat, lon) for lat, lon in self.anchor_latlons])
         
         # Convert bearing observations to mathematical angles (radians)
         self.observed_angles_rad = self.bearing_to_math_angle(self.observed_bearings_deg)
@@ -43,7 +43,7 @@ class PositionBiasEstimator:
         # Convert noise standard deviation to radians
         self.angle_noise_std_rad = np.radians(self.bearing_noise_std_deg)
     
-    def lonlat_to_meters(self, lon, lat):
+    def latlon_to_meters(self, lat, lon):
         """
         Convert longitude/latitude to relative meters from reference point.
         Uses simple equirectangular projection (good for small areas).
@@ -63,7 +63,7 @@ class PositionBiasEstimator:
         
         return np.array([x, y])
     
-    def meters_to_lonlat(self, x, y):
+    def meters_to_latlon(self, x, y):
         """
         Convert relative meters back to longitude/latitude.
         """
@@ -77,7 +77,7 @@ class PositionBiasEstimator:
         lat = self.ref_lat + np.degrees(y / R)
         lon = self.ref_lon + np.degrees(x / (R * np.cos(ref_lat_rad)))
         
-        return lon, lat
+        return lat, lon
     
     def bearing_to_math_angle(self, bearing_deg):
         """
@@ -189,16 +189,16 @@ class PositionBiasEstimator:
             
         return result
     
-    def estimate_position_and_bias(self, initial_guess_lonlat=None, max_attempts=5):
+    def estimate_position_and_bias(self, initial_guess_latlon=None, max_attempts=5):
         """
         Estimate position and bias using maximum likelihood with multiple attempts.
         
         Parameters:
-        - initial_guess_lonlat: [lon, lat, bias_deg] initial guess, if None uses centroid and zero bias
+        - initial_guess_latlon: [lon, lat, bias_deg] initial guess, if None uses centroid and zero bias
         - max_attempts: maximum number of optimization attempts with different starting points
         
         Returns:
-        - result_lonlat: dict with estimated longitude, latitude, and bias in degrees
+        - result_latlon: dict with estimated longitude, latitude, and bias in degrees
         - covariance: estimated covariance matrix of parameters (in meters and radians)
         """
         best_result = None
@@ -206,7 +206,7 @@ class PositionBiasEstimator:
         
         for attempt in range(max_attempts):
             try:
-                if initial_guess_lonlat is None or attempt > 0:
+                if initial_guess_latlon is None or attempt > 0:
                     # Generate different initial guesses for robustness
                     if attempt == 0:
                         # First attempt: centroid of anchors, zero bias
@@ -222,8 +222,8 @@ class PositionBiasEstimator:
                         initial_guess_meters = [x_init, y_init, bias_init]
                 else:
                     # Convert user-provided initial guess from lon/lat to meters
-                    lon, lat, bias_deg = initial_guess_lonlat
-                    x, y = self.lonlat_to_meters(lon, lat)
+                    lon, lat, bias_deg = initial_guess_latlon
+                    x, y = self.latlon_to_meters(lat, lon)
                     bias_rad = np.radians(bias_deg)
                     initial_guess_meters = [x, y, bias_rad]
                 
@@ -281,12 +281,12 @@ class PositionBiasEstimator:
         
         # Convert result back to lon/lat
         estimated_x, estimated_y, estimated_bias_rad = best_result.x
-        estimated_lon, estimated_lat = self.meters_to_lonlat(estimated_x, estimated_y)
+        estimated_lat, estimated_lon = self.meters_to_latlon(estimated_x, estimated_y)
         estimated_bias_deg = np.degrees(estimated_bias_rad)
         
-        result_lonlat = {
-            'longitude': estimated_lon,
+        result_latlon = {
             'latitude': estimated_lat,
+            'longitude': estimated_lon,
             'bias_degrees': estimated_bias_deg,
             'success': True,  # Always return success with fallback
             'message': best_result.message if hasattr(best_result, 'message') else 'Optimization successful'
@@ -297,7 +297,7 @@ class PositionBiasEstimator:
         if hasattr(best_result, 'hess_inv') and best_result.hess_inv is not None:
             covariance = best_result.hess_inv
         
-        return result_lonlat, covariance
+        return result_latlon, covariance
 
 def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
     """
@@ -314,7 +314,7 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
     start_time = time.time()
     
     # Define anchor points in longitude/latitude
-    anchor_positions_lonlat = [
+    anchor_positions_latlon = [
         [21.046234, 105.808489],
         [21.041684, 105.838083],
         [21.062275, 105.833513],
@@ -325,20 +325,20 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
     anchor_uncertainty_diameters = [30, 30, 30, 30, 30]
     
     # True position and bias (for simulation)
-    true_position_lonlat = [21.058617, 105.821816]
+    true_position_latlon = [21.058617, 105.821816]
     true_bias_deg = -3.0  # degrees clockwise bias
     bearing_noise_std = 1.0  # degrees (for simulation)
     estimator_noise_std = 1.0  # degrees (what we tell the estimator)
     
     # Create template estimator for coordinate conversion
     temp_estimator = PositionBiasEstimator(
-        anchor_positions_lonlat=anchor_positions_lonlat,
+        anchor_positions_latlon=anchor_positions_latlon,
         anchor_uncertainty_diameters=anchor_uncertainty_diameters,
         bearing_observations=[0, 0, 0, 0, 0],  # correct number of dummy values
         bearing_noise_std=estimator_noise_std
     )
     
-    true_position_meters = temp_estimator.lonlat_to_meters(true_position_lonlat[0], true_position_lonlat[1])
+    true_position_meters = temp_estimator.latlon_to_meters(true_position_latlon[0], true_position_latlon[1])
     
     # Storage for results
     position_errors = []
@@ -356,7 +356,7 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
         # Simulate observations for this run
         observed_bearings = []
         
-        for i, anchor_lonlat in enumerate(anchor_positions_lonlat):
+        for i, anchor_latlon in enumerate(anchor_positions_latlon):
             # Sample actual anchor position (with uncertainty)
             anchor_mean_meters = temp_estimator.anchors_meters[i]
             
@@ -389,7 +389,7 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
         
         # Create estimator for this simulation
         estimator = PositionBiasEstimator(
-            anchor_positions_lonlat=anchor_positions_lonlat,
+            anchor_positions_latlon=anchor_positions_latlon,
             anchor_uncertainty_diameters=anchor_uncertainty_diameters,
             bearing_observations=observed_bearings,
             bearing_noise_std=estimator_noise_std
@@ -401,8 +401,8 @@ def run_monte_carlo_simulation(n_simulations=100, plot_last=True):
         # Since we now always return success=True, all estimates should be successful
         if result['success']:
             # Calculate errors
-            true_meters = estimator.lonlat_to_meters(true_position_lonlat[0], true_position_lonlat[1])
-            est_meters = estimator.lonlat_to_meters(result['longitude'], result['latitude'])
+            true_meters = estimator.latlon_to_meters(true_position_latlon[0], true_position_latlon[1])
+            est_meters = estimator.latlon_to_meters(result['latitude'], result['longitude'])
             position_error_m = np.linalg.norm(est_meters - true_meters)
             bias_error_deg = abs(result['bias_degrees'] - true_bias_deg)
             
@@ -485,76 +485,49 @@ def find_position_and_bias(anchors_lat_lon, measured_bearings_deg,
     Finds the user's position (latitude, longitude) assuming zero bias.
     Only (x, y) are optimized; bias is always zero.
     """
-    if not anchors_lat_lon or not measured_bearings_deg:
-        raise ValueError("Anchors and measured bearings cannot be empty.")
-    if len(anchors_lat_lon) != len(measured_bearings_deg):
-        raise ValueError("Number of anchors must match number of bearings.")
-    if len(anchors_lat_lon) < 2:
-        raise ValueError("At least 2 (preferably 3 or more) anchors required to estimate position.")
+    # Reference point for local coordinates
+    ref_lat_deg, ref_lon_deg = anchors_lat_lon[0]
+    anchors_meters = [lat_lon_to_meters(lat, lon, ref_lat_deg, ref_lon_deg)
+                      for lat, lon in anchors_lat_lon]
+    anchors_meters = np.array(anchors_meters)
+    measured_bearings_rad = np.deg2rad(measured_bearings_deg)
 
-    ref_lat_deg = np.mean([a[0] for a in anchors_lat_lon])
-    ref_lon_deg = np.mean([a[1] for a in anchors_lat_lon])
-    anchors_meters_list = [lat_lon_to_meters(lat, lon, ref_lat_deg, ref_lon_deg)
-                           for lat, lon in anchors_lat_lon]
-    anchors_meters = np.array(anchors_meters_list, dtype=float)
-    measured_bearings_rad = np.deg2rad(np.array(measured_bearings_deg, dtype=float))
-    initial_user_x_meters = np.mean(anchors_meters[:, 0])
-    initial_user_y_meters = np.mean(anchors_meters[:, 1])
-    initial_guess = [initial_user_x_meters, initial_user_y_meters]
-
-    def residuals_nobias(params, anchors_meters, measured_bearings_rad):
+    def residuals(params, anchors_meters, measured_bearings_rad):
         user_x, user_y = params
-        num_anchors = anchors_meters.shape[0]
-        res = np.zeros(num_anchors)
-        for i in range(num_anchors):
-            anchor_x, anchor_y = anchors_meters[i, 0], anchors_meters[i, 1]
-            measured_bearing = measured_bearings_rad[i]
-            # Bias is always zero
-            true_bearing_rad = measured_bearing
-            residual = (user_x - anchor_x) * np.cos(true_bearing_rad) - \
-                       (user_y - anchor_y) * np.sin(true_bearing_rad)
-            res[i] = residual
+        res = []
+        for (anchor_x, anchor_y), bearing_rad in zip(anchors_meters, measured_bearings_rad):
+            # Direction vector of the line (bearing: 0°=North, clockwise)
+            dx = np.sin(bearing_rad)
+            dy = np.cos(bearing_rad)
+            # Vector from anchor to user
+            vx = user_x - anchor_x
+            vy = user_y - anchor_y
+            # Perpendicular distance from point to line
+            dist = np.abs(dx * vy - dy * vx)
+            res.append(dist)
         return res
+    
+    # Initial guess: centroid of anchors
+    initial_guess = np.mean(anchors_meters, axis=0)
+    result = least_squares(residuals, initial_guess, args=(anchors_meters, measured_bearings_rad))
 
-    results = {
-        "estimated_user_lat": None,
-        "estimated_user_lon": None,
-        "optimization_success": False,
-        "final_cost": None,
-        "message": "Optimization not run."
+    est_x, est_y = result.x
+    est_lat, est_lon = meters_to_lat_lon(est_x, est_y, ref_lat_deg, ref_lon_deg)
+
+    output = {
+        "estimated_user_lat": est_lat,
+        "estimated_user_lon": est_lon,
+        "success": result.success,
+        "cost": result.cost,
+        "nfev": result.nfev,
     }
 
-    try:
-        opt_result = least_squares(residuals_nobias, initial_guess,
-                                   args=(anchors_meters, measured_bearings_rad),
-                                   ftol=1e-9, xtol=1e-9, gtol=1e-9,
-                                   method='lm',
-                                   max_nfev=2000)
-        estimated_user_x_meters, estimated_user_y_meters = opt_result.x
-        estimated_user_lat, estimated_user_lon = meters_to_lat_lon(
-            estimated_user_x_meters, estimated_user_y_meters, ref_lat_deg, ref_lon_deg
-        )
-        results.update({
-            "estimated_user_lat": estimated_user_lat,
-            "estimated_user_lon": estimated_user_lon,
-            "optimization_success": opt_result.success,
-            "final_cost": opt_result.cost,
-            "message": opt_result.message
-        })
-        if true_user_lat is not None and true_user_lon is not None:
-            true_user_x_meters, true_user_y_meters = lat_lon_to_meters(
-                true_user_lat, true_user_lon, ref_lat_deg, ref_lon_deg
-            )
-            position_error_meters = np.sqrt(
-                (estimated_user_x_meters - true_user_x_meters)**2 +
-                (estimated_user_y_meters - true_user_y_meters)**2
-            )
-            results["position_error_meters"] = position_error_meters
-    except Exception as e:
-        results["optimization_success"] = False
-        results["message"] = f"Optimization failed: {e}"
+    if true_user_lat is not None and true_user_lon is not None:
+        true_x, true_y = lat_lon_to_meters(true_user_lat, true_user_lon, ref_lat_deg, ref_lon_deg)
+        pos_error = np.linalg.norm([est_x - true_x, est_y - true_y])
+        output["position_error_meters"] = pos_error
 
-    return results
+    return output
 
 # --- Monte Carlo Comparison Function ---
 def run_monte_carlo_comparison(n_simulations=100):
@@ -563,7 +536,7 @@ def run_monte_carlo_comparison(n_simulations=100):
     and the least-squares (orthogonal distance) method.
     """
     # Define anchor points in longitude/latitude
-    anchor_positions_lonlat = [
+    anchor_positions_latlon = [
         [21.046234, 105.808489],
         [21.041684, 105.838083],
         [21.062275, 105.833513],
@@ -571,18 +544,18 @@ def run_monte_carlo_comparison(n_simulations=100):
         [21.062281, 105.805139]
     ]
     anchor_uncertainty_diameters = [30, 30, 30, 30, 30]
-    true_position_lonlat = [21.058617, 105.821816]
-    true_bias_deg = -3.0
+    true_position_latlon = [21.058617, 105.821816]
+    true_bias_deg = 3.0
     bearing_noise_std = 1.0
     estimator_noise_std = 1.0
 
     temp_estimator = PositionBiasEstimator(
-        anchor_positions_lonlat=anchor_positions_lonlat,
+        anchor_positions_latlon=anchor_positions_latlon,
         anchor_uncertainty_diameters=anchor_uncertainty_diameters,
         bearing_observations=[0, 0, 0, 0, 0],
         bearing_noise_std=estimator_noise_std
     )
-    true_position_meters = temp_estimator.lonlat_to_meters(true_position_lonlat[0], true_position_lonlat[1])
+    true_position_meters = temp_estimator.latlon_to_meters(true_position_latlon[0], true_position_latlon[1])
 
     errors_likelihood = []
     errors_ls = []
@@ -591,7 +564,7 @@ def run_monte_carlo_comparison(n_simulations=100):
 
     for sim in range(n_simulations):
         observed_bearings = []
-        for i, anchor_lonlat in enumerate(anchor_positions_lonlat):
+        for i, anchor_latlon in enumerate(anchor_positions_latlon):
             anchor_mean_meters = temp_estimator.anchors_meters[i]
             cov_matrix = temp_estimator.anchor_covs_meters[i]
             eigenvals = np.linalg.eigvals(cov_matrix)
@@ -610,14 +583,14 @@ def run_monte_carlo_comparison(n_simulations=100):
 
         # --- Likelihood Estimator ---
         estimator = PositionBiasEstimator(
-            anchor_positions_lonlat=anchor_positions_lonlat,
+            anchor_positions_latlon=anchor_positions_latlon,
             anchor_uncertainty_diameters=anchor_uncertainty_diameters,
             bearing_observations=observed_bearings,
             bearing_noise_std=estimator_noise_std
         )
         result_likelihood, _ = estimator.estimate_position_and_bias()
-        true_meters = estimator.lonlat_to_meters(true_position_lonlat[0], true_position_lonlat[1])
-        est_meters = estimator.lonlat_to_meters(result_likelihood['longitude'], result_likelihood['latitude'])
+        true_meters = estimator.latlon_to_meters(true_position_latlon[0], true_position_latlon[1])
+        est_meters = estimator.latlon_to_meters(result_likelihood['latitude'], result_likelihood['longitude'])
         position_error_likelihood = np.linalg.norm(est_meters - true_meters)
         bias_error_likelihood = abs(result_likelihood['bias_degrees'] - true_bias_deg)
         errors_likelihood.append(position_error_likelihood)
@@ -625,10 +598,10 @@ def run_monte_carlo_comparison(n_simulations=100):
 
         # --- Least Squares Estimator ---
         ls_results = find_position_and_bias(
-            [[lat, lon] for lat, lon in anchor_positions_lonlat],
+            [[lat, lon] for lat, lon in anchor_positions_latlon],
             observed_bearings,
-            true_user_lat=true_position_lonlat[0],
-            true_user_lon=true_position_lonlat[1],
+            true_user_lat=true_position_latlon[0],
+            true_user_lon=true_position_latlon[1],
             true_bias_deg=true_bias_deg
         )
         errors_ls.append(ls_results["position_error_meters"])
@@ -668,6 +641,6 @@ def run_monte_carlo_comparison(n_simulations=100):
     plt.show()
 
 # Run your original simulation
-results = run_monte_carlo_simulation(n_simulations=100, plot_last=True)
+# results = run_monte_carlo_simulation(n_simulations=100, plot_last=True)
 # Run the comparison
-run_monte_carlo_comparison(n_simulations=100)
+# run_monte_carlo_comparison(n_simulations=100)
