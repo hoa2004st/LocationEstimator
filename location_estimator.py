@@ -642,30 +642,54 @@ def run_monte_carlo_comparison(n_simulations=100, true_bias_deg = 3.0, bearing_n
 # Run your original simulation
 # results = run_monte_carlo_simulation(n_simulations=100, plot_last=True)
 # Run the comparison
-biases = [0, 5, 10]
-noises = [1, 3, 5, 7, 10]
-results = {}
-for bias in biases:
-    results[bias] = {}
-    for noise in noises:
-        print(f"\nRunning comparison with bias {bias}° and noise {noise}°")
-        results[bias][noise] = run_monte_carlo_comparison(n_simulations=1000, true_bias_deg=bias, bearing_noise_std=noise)
+# biases = [0, 5, 10]
+# noises = [1, 3, 5, 7, 10]
+# results = {}
+# for bias in biases:
+#     results[bias] = {}
+#     for noise in noises:
+#         print(f"\nRunning comparison with bias {bias}° and noise {noise}°")
+#         results[bias][noise] = run_monte_carlo_comparison(n_simulations=1000, true_bias_deg=bias, bearing_noise_std=noise)
 
-for bias in biases:
-    means_likelihood = []
-    means_ls = []
-    for noise in noises:
-        errors_likelihood, errors_ls = results[bias][noise]
-        means_likelihood.append(np.mean(errors_likelihood))
-        means_ls.append(np.mean(errors_ls))
+# for bias in biases:
+#     means_likelihood = []
+#     means_ls = []
+#     for noise in noises:
+#         errors_likelihood, errors_ls = results[bias][noise]
+#         means_likelihood.append(np.mean(errors_likelihood))
+#         means_ls.append(np.mean(errors_ls))
     
-    plt.figure(figsize=(7, 5))
-    plt.plot(noises, means_likelihood, marker='o', label='Likelihood Estimator')
-    plt.plot(noises, means_ls, marker='s', label='Least Squares Estimator')
-    plt.xlabel('Bearing Noise Std (deg)')
-    plt.ylabel('Mean Position Error (meters)')
-    plt.title(f'Position Error vs. Bearing Noise (Bias = {bias}°)')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.show()
+#     plt.figure(figsize=(7, 5))
+#     plt.plot(noises, means_likelihood, marker='o', label='Likelihood Estimator')
+#     plt.plot(noises, means_ls, marker='s', label='Least Squares Estimator')
+#     plt.xlabel('Bearing Noise Std (deg)')
+#     plt.ylabel('Mean Position Error (meters)')
+#     plt.title(f'Position Error vs. Bearing Noise (Bias = {bias}°)')
+#     plt.legend()
+#     plt.grid(True, alpha=0.3)
+#     plt.tight_layout()
+#     plt.show()
+
+fixed_noise = 3
+biases_for_plot = [0, 2, 4, 6, 8, 10, 12, 15, 20]
+means_likelihood = []
+means_ls = []
+
+for bias in biases_for_plot:
+    print(f"\nRunning comparison with bias {bias}° and noise {fixed_noise}° for error vs. bias plot")
+    errors_likelihood, errors_ls = run_monte_carlo_comparison(
+        n_simulations=1000, true_bias_deg=bias, bearing_noise_std=fixed_noise
+    )
+    means_likelihood.append(np.mean(errors_likelihood))
+    means_ls.append(np.mean(errors_ls))
+
+plt.figure(figsize=(7, 5))
+plt.plot(biases_for_plot, means_likelihood, marker='o', label='Likelihood Estimator')
+plt.plot(biases_for_plot, means_ls, marker='s', label='Least Squares Estimator')
+plt.xlabel('True Bias (deg)')
+plt.ylabel('Mean Position Error (meters)')
+plt.title(f'Position Error vs. Bias (Bearing Noise Std = {fixed_noise}°)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
